@@ -10,7 +10,6 @@ import      re
 import      json
 
 log_file        = "../res/25-03-14_11-56-57/log.txt"
-all_news_file   = "../data/news_tim.json"
 sel_news_file   = "../data/news_filter.json"
 
 def read_res_file( fname ):

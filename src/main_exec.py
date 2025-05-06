@@ -234,10 +234,8 @@ def archive():
                 "dialogs.json",
                 "dialogs_asst.json",
                 "dialogs_user.json",
-                "news_alice.json",
                 "news_cherry.json",
                 "news_filter.json",
-                "news_tim.json",
                 "trait.json",
     )
 
