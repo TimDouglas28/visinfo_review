@@ -18,6 +18,8 @@ import      classify_img    as      cim
 FJSON_O     = "../data/news_200.json"
 
 IMG_PATH    = "../imgs"
+# IMG_PATH    = "../imgs_all/imgs_alice"
+
 
 def load_json( f ):
     """

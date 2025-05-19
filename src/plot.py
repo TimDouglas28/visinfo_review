@@ -49,6 +49,7 @@ tab_colors  = [ 'tab:blue', 'tab:orange', 'tab:green', 'tab:red',
           'tab:olive', 'tab:cyan' ]
 # overwrite to match barplot color scheme
 tab_colors  = [ "#ff3b30", "#9b45c2", "#2fae54", "#0051b3" ]
+tab_colors  = [ "#ff3b30", "#ff3b30", "#0051b3", "#0051b3" ]
 line_style  = [ '-', '--', '-', '--' ]
 
 # markers

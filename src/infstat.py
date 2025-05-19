@@ -26,8 +26,8 @@ DO_NOTHING          = False                 # for interactive use
 DO_MPLOTS           = False                 # generate multiple plots
 DO_SPLOTS           = False                 # generate single plots
 DO_LKPLOT           = False                 # generate Likert scale plots
-DO_RADAR            = False                 # generate radar plots
-DO_STATS            = True                  # generate statistics
+DO_RADAR            = True                  # generate radar plots
+DO_STATS            = False                 # generate statistics
 
 # specification of the executions to analyze
 # if res_range is empty all executions found in ../res are analyzed
@@ -37,8 +37,7 @@ DO_STATS            = True                  # generate statistics
 res_range           = [ "25-04-06_11-45-18", "25-04-06_19-41-24" ]  # early 200 news, gpt profiles
 res_range           = [ "25-04-07_19-29-58", "25-04-11_21-01-37" ]  # corrected 200 news, profiles gpt, claude, llava
 res_range           = [ "25-04-12_18-21-27", "25-04-13_03-44-53" ]  # 200 news, demography gpt
-res_range           = [ "25-04-12_05-23-54", "25-04-12_18-06-20" ]  # 200 news, profiles, Qwen only
-res_range           = [ "25-04-07_19-29-58", "25-04-12_18-06-20" ]  # 200 news, profiles gpt, claude, llava, Qwen
+res_range           = [ "25-04-12_05-23-54", "25-04-12_18-06-20" ]  # 200 news, profiles, qwen only
 res_range           = [["25-04-08_03-58-28", "25-04-21_17-51-45"]]  # gpt void normal and blank_img
 res_range           = [ [
     "25-04-08_00-06-12", "25-04-08_01-05-48", "25-04-08_02-04-13", "25-04-08_03-03-27",
@@ -52,11 +51,13 @@ res_range           = [ [
     "25-04-08_22-53-01", "25-04-09_02-03-06", "25-04-09_05-16-23", "25-04-09_08-21-55",
     "25-04-23_16-16-55", "25-04-23_19-14-09", "25-04-23_22-09-40", "25-04-24_00-53-46",
 ]]  # gpt and claude compare dialogs_post for p_neur, p_mach, p_narc, p_psyc
+res_range           = [ "25-04-07_19-29-58", "25-04-12_18-06-20" ]  # 200 news, profiles gpt, claude, llava, qwen
+res_range           = [ "25-04-07_19-29-58", "25-04-21_12-05-58" ]  # all valid executions gpt, calude, llava, qwen
+res_range           = [ "25-04-12_18-21-27", "25-04-21_12-05-58" ]  # demography gpt, calude, llava, qwen
 
 res                 = "../res"                  # results directory
 dir_json            = "../data"                 # directory with all input data
 dir_stat            = "../stat"                 # output directory
-# f_demo              = "demo_large.json"         # filename of demographic data
 
 # filename of demographic data
 # NOTE that there are different data formats, therefore the file name
@@ -656,13 +657,15 @@ def likert_to_bool( df, half_neutral=True ):
     if half_neutral:
         df[ columns_bool[ 0 ] ] = df[ 'lk4_img' ] + df[ 'lk5_img' ] + 0.5 * df[ 'lk3_img' ]
         df[ columns_bool[ 3 ] ] = df[ 'lk4_txt' ] + df[ 'lk5_txt' ] + 0.5 * df[ 'lk3_txt' ]
+        df[ columns_bool[ 2 ] ] = df[ 'unk_img' ]
+        df[ columns_bool[ 5 ] ] = df[ 'unk_txt' ]
     else:
-        df[ columns_bool[ 0 ] ] = df[ 'lk4_img' ] + df[ 'lk5_img' ]
+        df[ columns_bool[ 0 ] ] = df[ 'lk4_img' ] + df[ 'lk5_img' ] # fraction of YES answer for text+image
         df[ columns_bool[ 3 ] ] = df[ 'lk4_txt' ] + df[ 'lk5_txt' ] # fraction of YES answer for text only
+        df[ columns_bool[ 2 ] ] = df[ 'lk3_img' ] + df[ 'unk_img' ] # fraction of neutral or missing answer for text+image
+        df[ columns_bool[ 5 ] ] = df[ 'lk3_txt' ] + df[ 'unk_txt' ] # fraction of neutral or missing answer for text only
     df[ columns_bool[ 1 ] ] = df[ 'lk1_img' ] + df[ 'lk2_img' ] # fraction of NO answer for text+image
-    df[ columns_bool[ 2 ] ] = df[ 'lk3_img' ] + df[ 'unk_img' ] # fraction of neutral or missing answer for text+image
     df[ columns_bool[ 4 ] ] = df[ 'lk1_txt' ] + df[ 'lk2_txt' ] # fraction of NO answer for text only
-    df[ columns_bool[ 5 ] ] = df[ 'lk3_txt' ] + df[ 'unk_txt' ] # fraction of neutral or missing answer for text only
 
     df = df.drop( columns=old_columns )
 
@@ -812,6 +815,38 @@ def means_tags( df, no_value=False ):
     return mt, mmt
 
 
+def pearson( df, x, y ):
+    """
+    compute Pearson's coefficient
+    Construct the regression formula in the 'R'-style used in the ols function of statsmodels
+    the p value derives from Student t applied to
+        t = r * sqrt( ( n-2 ) / ( 1 - r^2 ) )
+    take into account if the x column is numeric or not (y should be)
+
+    params:
+        df              [pandas.core.frame.DataFrame] the data in pandas DataFrame
+        x               [str] one of the independent variables
+        y               [str] one of the dependent variables
+
+    return:             [tuple] r, p-value
+    """
+    numeric     = df[ x ].dtype.kind in 'biuf'  # bool/int/uint/float
+    if numeric:
+        formula     = f"{y} ~ {x}"
+    else:
+        formula     = f"{y} ~ C({x})"
+    model       = ols( formula, df ).fit()
+    r2          = model.rsquared
+    r2          = max( r2, 0.0 )                # for tiny numbers may be even negative
+    r           = np.sqrt( r2 )
+    if numeric:                                 # then use a sign for r
+        sign        = np.sign( model.params[ x ] )
+        r           *= sign
+    p           = model.pvalues[ x ]
+
+    return r, p
+
+
 def anova_1( df, x, y ):
     """
     compute one-way anova of one independent categorial variable x against the result y
@@ -859,7 +894,7 @@ def shapiro_wilk( df ):
     yes_txt     = "yes_txt"
 
     assert yes_img in df.columns, "column {yes_img} not found in the dataframe"
-    
+
     yes_diff    = df[ yes_img ] - df[ yes_txt ]
     _, p_value  = shapiro( yes_diff )
 
@@ -882,7 +917,7 @@ def kolmogorov_smirnov( df ):
     yes_txt     = "yes_txt"
 
     assert yes_img in df.columns, "column {yes_img} not found in the dataframe"
-    
+
     yes_diff    = df[ yes_img ] - df[ yes_txt ]
     yes_mean    = yes_diff.mean()
     yes_std     = yes_diff.std()
@@ -923,9 +958,9 @@ def wilcoxon_stat( df ):
     yes_txt     = "yes_txt"
 
     assert yes_img in df.columns, "column {yes_img} not found in the dataframe"
-    
+
     s, p_value  = wilcoxon( df[ yes_img ], df[ yes_txt ] )
-    
+
     yes_diff    = df[ yes_img ] - df[ yes_txt ]
     non_0_diff  = yes_diff[ yes_diff != 0 ]         # drop zero differences
     non_0_sqr   = np.sqrt( len( non_0_diff ) )      # this is the denominator in the formula for r
@@ -957,7 +992,7 @@ def mixedmod_stat( df, full_output=False ):
     id_vars             = [ 'news', 'value' ]
 
     assert "yes_img" in df.columns, "column {yes_img} not found in the dataframe"
-    
+
     # there are now two new columns: "yes" that is either "yes_txt" or "yes_img", and "modality" for txt or img
     df_long             = df.melt( id_vars=id_vars, value_vars=scores, var_name='modality', value_name='yes' )
     # set the order for modality and value so to have as interaction modality[T.yes_img]:value[T.false]
@@ -971,7 +1006,7 @@ def mixedmod_stat( df, full_output=False ):
 
     params              = result.params
     pvalues             = result.pvalues
- 
+
     # the order of data is:
     # [ Intercept, modality[T.yes_img], value[T.true], modality[T.yes_img]:value[T.false] Group_Var ]
     interact            = params.iloc[ 3 ]
@@ -1155,6 +1190,52 @@ def do_multiple_plots( df ):
 
 
 
+def print_profile_corr( f, df ):
+    """
+    Print correlations for single profiles against "void"
+
+    params:
+        f       [TextIOWrapper] text stream of the output file
+        df      [pandas.core.frame.DataFrame] the data in pandas DataFrame
+    """
+    profiles        = df.profile.unique().tolist()
+    profiles.remove( 'void' )
+    f.write( 80 * "=" + "\n" )
+    f.write( " profile correlations ".center( 80, ' ' ) + '\n' )
+    f.write( 80 * "=" + "\n\n" )
+    f.write( f"                        yes_img             yes_txt       yes\n" )
+    f.write( f"model  profile         r    p-value     r   p-value     r    p-value\n" )
+    f.write( "________________________________________________________________________________________________\n" )
+    m               = "all"
+    # cycle over all possible profile values, excluding "void"
+    for x in profiles:
+        # filter records keeping only those with one profile (x) and profile "void"
+        dfp             = df[ df.profile.isin( [ "void", x ] )  ].copy()
+        # add a numeric colomn which is 1 when profile==x, otherwise 0
+        dfp[ "x" ]      = dfp[ 'profile' ].str.contains(x, case=False, na=False ).astype(int)
+        dfpy            = unify_yes( dfp )
+        ri, pi          = pearson( dfp, "x", "yes_img" )
+        rt, pt          = pearson( dfp, "x", "yes_txt" )
+        ry, py          = pearson( dfpy, "x", "yes" )
+        f.write( f"{m:<8} {x:<10}{ri:6.3f}  {pi:5.4f}   {rt:6.3f}  {pt:5.4f}   {ry:6.3f}  {py:5.4f}\n" )
+    models      = df[ "model" ].unique().tolist()
+    # do the same as above, separated by models
+    if len( models ) > 1:
+        for m in models:
+            dfm     = df[ (df[ 'model' ]==m ) ]
+            for x in profiles:
+                dfp             = dfm[ dfm.profile.isin( [ "void", x ] )  ].copy()
+                dfp[ "x" ]      = dfp[ 'profile' ].str.contains(x, case=False, na=False ).astype(int)
+                dfpy            = unify_yes( dfp )
+                ri, pi          = pearson( dfp, "x", "yes_img" )
+                rt, pt          = pearson( dfp, "x", "yes_txt" )
+                ry, py          = pearson( dfpy, "x", "yes" )
+                f.write( f"{m:<8} {x:<10}{ri:6.3f}  {pi:5.4f}   {rt:6.3f}  {pt:5.4f}   {ry:6.3f}  {py:5.4f}\n" )
+    f.write( "________________________________________________________________________________________________\n\n" )
+
+
+
+
 def print_anova_1( f, df, dft, groups ):
     """
     Print one-way anova
@@ -1286,8 +1367,10 @@ def do_stat( df ):
     the group of columns to be analyzed
 
     """
+# general statistics for profile executions
     # for basic statistics test, NOTE that in this case entries should be lists
     # this is the group for "yes..." dependent variables
+    title       = ""
     yes_groups  = [
         [ "value" ],
         [ "tagi" ],
@@ -1295,7 +1378,7 @@ def do_stat( df ):
         [ "tag" ],
         [ "value", "tag" ],
     ]
-    # this is the group for agreement dependent variables
+    # this is the group for agreement dependent variables, the same is used for UNK
     agr_groups  = [
         [ "value" ],
         [ "profile" ],
@@ -1306,6 +1389,7 @@ def do_stat( df ):
     an1_groups  = [ "value", "tag", "tagi", "profile" ] # for anova 1
     wil_groups  = [ "value", "tag", "profile" ]         # for Wilcoxon test
     mml_groups  = [ "tag", "profile" ]                  # for Mixed Model test
+    do_profile  = True                                  # do profile correlation
 
 # settings specific for comparing blank_img, without higher statistics
     yes_groups  = [ [ "blank_img" ] ]
@@ -1313,6 +1397,7 @@ def do_stat( df ):
     agr_groups  = []
     wil_groups  = []
     mml_groups  = []
+    do_profile  = False                                 # do profile correlation
 
 # settings specific for comparing reason_3steps + reason_share_likert5 with ask_share_noexplain_likert5
     yes_groups  = [ [ "postdia" ] ]
@@ -1320,6 +1405,7 @@ def do_stat( df ):
     an1_groups  = [ "postdia" ]
     wil_groups  = []
     mml_groups  = []
+    do_profile  = False                                 # do profile correlation
 
 # settings specific for boolean, no comparison...
     yes_groups  = [ [ "value" ], [ "value", "tag" ] ]
@@ -1327,6 +1413,7 @@ def do_stat( df ):
     an1_groups  = [ "value" ]
     wil_groups  = [ "value" ]
     mml_groups  = [ "" ]
+    do_profile  = False                                 # do profile correlation
 
 # settings specific for comparing ask_user_dsc and ask_dsc, without higher statistics
     yes_groups  = [ [ "postdia" ], [ "postdia", "profile" ], [ "postdia", "value", "profile" ] ]
@@ -1334,6 +1421,55 @@ def do_stat( df ):
     an1_groups  = [ "postdia" ]
     wil_groups  = []
     mml_groups  = []
+    do_profile  = False                                 # do profile correlation
+
+# general statistics for demographic executions
+    title       = "demography for all models"
+    yes_groups  = [
+        [ "sex" ],
+        [ "age" ],
+        [ "party" ],
+        [ "race" ],
+        [ "sex", "party" ],
+        [ "sex", "party", "age" ],
+        [ "sex", "party", "race" ],
+        [ "value", "sex" ],
+        [ "value", "age" ],
+        [ "value", "party" ],
+        [ "value", "race" ],
+        [ "tag", "sex" ],
+        [ "tag", "age" ],
+        [ "tag", "party" ],
+        [ "tag", "race" ],
+    ]
+    agr_groups  = [
+        [ "sex" ],
+        [ "age" ],
+        [ "party" ],
+        [ "race" ],
+    ]
+    an1_groups  = [ "sex", "age", "party", "race" ]     # for anova 1
+    wil_groups  = [ "sex", "age", "party", "race" ]     # for Wilcoxon test
+    mml_groups  = [ "sex", "age", "party", "race" ]     # for Mixed Model test
+    do_profile  = False                                 # do profile correlation
+
+# general statistics for all executions (profiles and demographics) - only common groups can be analyzed
+    title       = "global statistics on all executions"
+    yes_groups  = [ [ "value" ], [ "tag" ], [ "value", "tag" ], ]
+    agr_groups  = [ [ "value" ], [ "tag" ], ]
+    an1_groups  = [ "value", "tag", "tagi" ]            # for anova 1
+    wil_groups  = [ "value", "tag" ]                    # for Wilcoxon test
+    mml_groups  = [ "tag", "" ]                         # for Mixed Model test
+    do_profile  = False                                 # do profile correlation
+
+# statistics specific for profiles
+    title       = "statistics for profiling (no Wilcoxon)"
+    yes_groups  = [ [ "value" ], [ "profile" ], [ "value", "profile" ], ]
+    agr_groups  = [ [ "value" ], [ "profile" ], ]
+    an1_groups  = []                                    # for anova 1
+    wil_groups  = []                                    # for Wilcoxon test
+    mml_groups  = []                                    # for Mixed Model test
+    do_profile  = True                                  # do profile correlation
 
     scores      = [ 'yes_img', 'yes_txt' ]              # assume statistics for boolean results only
     if not "yes_img" in df.columns:
@@ -1346,6 +1482,7 @@ def do_stat( df ):
     f.write( 80 * "=" + "\n\n" )
     f.write( 80 * "+" + "\n" )
     f.write( "basic statistics for YES scores".center( 80, ' ' ) + '\n' )
+    f.write( title.center( 80, ' ' ) + '\n' )
     f.write( 80 * "+" + "\n\n" )
     print_means( f, df, dft, yes_groups, scores=['yes_img','yes_txt'] )
     if len( agr_groups ):
@@ -1358,7 +1495,10 @@ def do_stat( df ):
         f.write( 80 * "+" + "\n\n" )
         print_means( f, df, dft, agr_groups, scores=['unk_img','unk_txt'] )
 
-    print_anova_1( f, df, dft, an1_groups )
+    if do_profile:
+        print_profile_corr( f, df )
+    if len( an1_groups ):
+        print_anova_1( f, df, dft, an1_groups )
 
     f.close()
 
@@ -1370,6 +1510,7 @@ def do_stat( df ):
     f           = open( fname, 'w' )
     f.write( 80 * "+" + "\n" )
     f.write( "higher statistics".center( 80, ' ' ) + '\n' )
+    f.write( title.center( 80, ' ' ) + '\n' )
     f.write( 80 * "+" + "\n\n" )
     p_value     = normality_test( df )
     f.write( f"the preliminary test for normality of the distribution gives p-value={p_value}\n" )

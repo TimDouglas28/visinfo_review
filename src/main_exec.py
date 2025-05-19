@@ -229,13 +229,10 @@ def archive():
     Save a copy of current python source and json data files in the execution folder
     """
     jfiles  = (
-                "demo_large.json",
                 "demo_small.json",
-                "dialogs.json",
                 "dialogs_asst.json",
                 "dialogs_user.json",
-                "news_cherry.json",
-                "news_filter.json",
+                "news_200.json",
                 "trait.json",
     )
 
