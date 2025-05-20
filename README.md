@@ -27,7 +27,7 @@ This repository has been prepared to support anonymous peer review for the paper
   - `.hf.txt`: Placeholder for the Hugging Face API token (⚠️ not included; should contain the raw key string only).
 
 
--   `imgs/`: News-related images used in the dataset. **Note:** Including image files in a Git repository is generally discouraged due to repository bloat and versioning limitations. However, we provide them here to simplify access and ensure a smooth review process.
+-   `imgs/`: News-related images used in the dataset. **Note:** Including image files in a Git repository is generally discouraged due to repository bloat and versioning limitations. However, we provide them here to simplify access and ensure a smooth review process. **Disclaimer:** This dataset contains material (such as text and images) that may be protected by copyright and owned by third parties. We do not claim any rights over such content. All copyrights remain with their respective owners. This dataset is shared solely for non-commercial research and educational purposes.
 
 -   `res/`: Stores the results generated from simulation runs (provided empty).
 
